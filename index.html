@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>FX Сканер</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>FX Сканер <small id="src"></small></h1>
+
+  <div class="tfs" id="tfs"></div>
+  <button class="bigbtn" id="scan">Подобрать пару</button>
+  <div class="status" id="status"></div>
+
+  <div class="card signal wait" id="result" hidden></div>
+
+  <div class="card" id="livecard" hidden>
+    <div class="livehead"><b id="livepair"></b><span id="liveprice"></span></div>
+    <canvas id="cv"></canvas>
+    <div class="note" id="livenote"></div>
+  </div>
+
+  <div class="card" id="rankcard" hidden>
+    <p class="h2">Другие пары с сигналом</p>
+    <table id="rank"></table>
+  </div>
+
+  <div class="card" id="stratcard" hidden>
+    <p class="h2">Все стратегии на выбранной паре</p>
+    <table id="strats"></table>
+    <div class="note">«Угадано» считается на истории этой пары, со сглаживанием на малой выборке. «Нужно» это точка безубыточности при выбранной выплате.</div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Настройки</summary>
+      <label>Источник данных</label>
+      <select id="source">
+        <option value="demo">Демо (синтетические данные)</option>
+        <option value="twelve">Twelve Data (реальные котировки)</option>
+      </select>
+      <label>API-ключ Twelve Data</label>
+      <input id="key" type="password" placeholder="ключ с twelvedata.com" autocomplete="off">
+      <label>Выплата брокера, %</label>
+      <input id="payout" type="number" min="50" max="100" value="85">
+      <div class="note" style="margin-top:10px">Ключ хранится только на этом устройстве. Бесплатный лимит Twelve Data: 8 запросов в минуту, подбор по 8 парам использует их все.</div>
+    </details>
+  </div>
+
+  <div class="disc">Это сигналы по индикаторам, а не финансовая рекомендация. Направление цены на короткий срок угадать нельзя, а результат на истории не гарантирует результат в будущем. Сначала проверяй на демо-счёте. Цены брокера могут немного отличаться от рыночных, окончательно сверяй их в терминале.</div>
+</div>
+
+<script src="js/indicators.js"></script>
+<script src="js/strategies.js"></script>
+<script src="js/scanner.js"></script>
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
