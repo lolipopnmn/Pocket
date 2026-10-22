@@ -38,6 +38,14 @@
     <div class="note">«Угадано» считается на истории этой пары, со сглаживанием на малой выборке. «Нужно» это точка безубыточности при выбранной выплате.</div>
   </div>
 
+  <div class="card" id="jcard" hidden>
+    <p class="h2">Журнал сигналов</p>
+    <div class="note" id="jstat" style="margin:0 0 10px"></div>
+    <table id="jlist"></table>
+    <div class="note">Каждый показанный сигнал записывается, а после экспирации результат сверяется с реальными свечами. Это проверка на новых данных, ей можно верить больше, чем истории. Хранится только на этом устройстве, в демо-режиме не ведётся.</div>
+    <button id="jclear" style="margin-top:10px">Очистить журнал</button>
+  </div>
+
   <div class="card">
     <details>
       <summary>Настройки</summary>
@@ -62,6 +70,7 @@
 <script src="js/strategies.js"></script>
 <script src="js/scanner.js"></script>
 <script src="js/data.js"></script>
+<script src="js/journal.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -36,11 +36,13 @@ for (const pair of ['EUR/USD', 'USD/JPY']) {
     for (const p of res.per) for (const h of Scanner.HORIZONS) {
       const st = p.stats[h];
       ok(st.w + st.l === st.n && st.adj > 0 && st.adj < 1, p.id + ': статистика корректна');
+      ok(st.a.w + st.b.w === st.w && st.a.l + st.b.l === st.l, p.id + ': половины истории в сумме дают полную выборку');
+      ok(st.ok === (st.adj > res.be && st.a.adj > res.be && st.b.adj > res.be), p.id + ': флаг ok согласован');
     }
     if (res.best) {
       ok(res.best.dir === 1 || res.best.dir === -1, 'направление');
       ok(res.best.score > 0 && res.best.contrib.length > 0, 'есть вклад стратегий');
-      ok(res.best.contrib.every(x => x.edge > 0), 'в сигнал идут только стратегии с преимуществом');
+      ok(res.best.contrib.every(x => x.ok && x.edge > 0 && x.a.adj > res.be && x.b.adj > res.be), 'в сигнал идут только стратегии с преимуществом на обеих половинах');
     }
     console.log(pair, 'salt', salt, '| сигнал сейчас:', res.best ? (res.best.dir > 0 ? 'ВВЕРХ' : 'ВНИЗ') + ' h=' + res.best.h : 'нет',
       '| сработало стратегий:', res.firing);

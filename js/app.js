@@ -12,6 +12,29 @@
   let live = null;      // { pair, timer, signalT, dir }
   let busy = false;
 
+  /* ---------- журнал сигналов (хранится на устройстве) ---------- */
+  const JKEY = 'pocketfx_journal';
+  const tfMsMap = Object.fromEntries(Object.keys(TFS).map(t => [t, TFS[t].ms]));
+  let journal = [];
+  try { journal = JSON.parse(localStorage.getItem(JKEY) || '[]'); } catch (e) {}
+  const saveJ = () => { try { localStorage.setItem(JKEY, JSON.stringify(journal)); } catch (e) {} };
+  const JST = { win: '✅ угадал', loss: '❌ мимо', draw: '↺ возврат', open: '⏳ ждёт', lost: '— нет данных' };
+
+  function renderJournal() {
+    $('jcard').hidden = journal.length === 0;
+    if (!journal.length) return;
+    const st = Journal.stats(journal, S.payout);
+    let msg = 'Проверено: ' + st.n + ' (угадано ' + st.w + ', мимо ' + st.l + (st.d ? ', возврат ' + st.d : '') + '), ждут результата: ' + st.open + '. ';
+    if (st.n) msg += 'Доля побед ' + pct(st.rate) + ' (95%-интервал ' + pct(st.ci.lo) + '–' + pct(st.ci.hi) + '), нужно ' + pct(st.be) + '. ';
+    if (st.n < 30) msg += 'Мало сигналов для выводов: нужно хотя бы 30, а лучше 100.';
+    else if (st.ci.lo > st.be) msg += 'Пока выше точки безубыточности, но проверь на большей выборке.';
+    else if (st.ci.hi < st.be) msg += 'Ниже точки безубыточности: по этим сигналам ты бы терял деньги.';
+    else msg += 'В пределах погрешности от точки безубыточности: отличить от случайности пока нельзя.';
+    $('jstat').textContent = msg;
+    $('jlist').innerHTML = journal.slice(-8).reverse().map(e =>
+      '<tr><td>' + e.t0.slice(5) + ' · ' + e.pair + ' ' + (e.dir > 0 ? '▲' : '▼') + ' ' + (e.h * TFS[e.tf].ms / 60000) + ' мин</td><td>' + (JST[e.status] || e.status) + '</td></tr>').join('');
+  }
+
   const pct = (x) => (x * 100).toFixed(1) + '%';
   const tfMin = () => TFS[S.tf].ms / 60000;
   const dirCls = (d) => (d > 0 ? 'b' : d < 0 ? 's' : 'n');
@@ -40,7 +63,7 @@
       '<div class="dir">' + (b.dir > 0 ? 'BUY ▲' : 'SELL ▼') + '</div>' +
       '<div class="exp">на ' + expTxt(b.h) + '</div>' +
       '<div class="sub">Совпали стратегии: ' + b.contrib.length + ' из ' + res.per.length +
-      '. Нужно угадывать минимум ' + pct(res.be) + ', чтобы не терять.</div>' +
+      '. Преимущество подтверждено на обеих половинах истории. Нужно угадывать минимум ' + pct(res.be) + ', чтобы не терять.</div>' +
       '<table style="margin-top:12px;text-align:left"><tr><td class="note">Сработавшая стратегия</td><td class="note">угадано (сделок)</td></tr>' + lines + '</table>' +
       (stale.length ? '<div class="sub warn">Нет свежих свечей: ' + stale.join(', ') + '</div>' : '') + errHtml(errors);
 
@@ -55,9 +78,13 @@
     $('strats').innerHTML = res.per.map(p => {
       const st = p.stats[b.h];
       const flag = p.dir ? '<span class="' + dirCls(p.dir) + '">' + (p.dir > 0 ? '▲ ' : '▼ ') + '</span>' : '';
-      return '<tr><td>' + flag + p.name + '</td><td>' + pct(st.adj) + ' / ' + pct(res.be) + ' (' + st.n + ')</td></tr>';
+      return '<tr><td>' + flag + p.name + '</td><td>' + pct(st.adj) + ' / ' + pct(res.be) + ' (' + st.n + ')' + (st.ok ? ' ✓' : '') + '</td></tr>';
     }).join('');
 
+    if (S.source !== 'demo') {
+      journal = Journal.add(journal, { pair, tf: S.tf, t0: res.last.t, price: res.last.c, dir: b.dir, h: b.h });
+      saveJ(); renderJournal();
+    }
     startLive(pair, res.last.t, b.dir);
   }
 
@@ -230,6 +257,7 @@
         if (/ключ/i.test(e.message)) break;
       }
     }
+    if (S.source !== 'demo') { journal = Journal.resolve(journal, store, tfMsMap, S.tf); saveJ(); renderJournal(); }
     const ranked = Scanner.rank(results);
     $('status').textContent = S.source === 'demo' ? 'Демо-режим: данные случайные, результат ничего не говорит о рынке.' : '';
     if (ranked.length) showTop(ranked[0], ranked, results.length, stale, errors);
@@ -250,10 +278,12 @@
   $('key').onchange = (e) => { S.key = e.target.value.trim(); save(); };
   $('payout').onchange = (e) => { S.payout = Math.min(100, Math.max(50, +e.target.value || 85)); save(); sync(); };
   $('scan').onclick = scan;
+  $('jclear').onclick = () => { journal = []; saveJ(); renderJournal(); };
   $('term').oninput = termCheck;
   window.addEventListener('resize', () => {
     if (!live) return;
     if (lw) { try { lw.chart.resize($('lw').clientWidth || 340, 240); } catch (e) {} } else updateLive();
   });
   sync();
+  renderJournal();
 })();

@@ -83,6 +83,6 @@
     return Date.now() - parseT(candles[candles.length - 1].t) > 10 * TFS[tf].ms;
   }
 
-  root.Data = { PAIRS, TFS, genDemo, tickDemo, fetchTwelve, isStale, parseT };
+  root.Data = { PAIRS, TFS, genDemo, tickDemo, fetchTwelve, isStale, parseT, fmtT };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Data;
 })(typeof window !== 'undefined' ? window : globalThis);
