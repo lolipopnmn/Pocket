@@ -19,8 +19,12 @@
 
   <div class="card" id="livecard" hidden>
     <div class="livehead"><b id="livepair"></b><span id="liveprice"></span></div>
+    <div id="lw" hidden></div>
     <canvas id="cv"></canvas>
     <div class="note" id="livenote"></div>
+    <label for="term">Цена в терминале Pocket Option</label>
+    <input id="term" type="number" step="any" inputmode="decimal" placeholder="введи текущую цену, чтобы сверить">
+    <div class="note" id="termnote"></div>
   </div>
 
   <div class="card" id="rankcard" hidden>
@@ -53,6 +57,7 @@
   <div class="disc">Это сигналы по индикаторам, а не финансовая рекомендация. Направление цены на короткий срок угадать нельзя, а результат на истории не гарантирует результат в будущем. Сначала проверяй на демо-счёте. Цены брокера могут немного отличаться от рыночных, окончательно сверяй их в терминале.</div>
 </div>
 
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="js/indicators.js"></script>
 <script src="js/strategies.js"></script>
 <script src="js/scanner.js"></script>

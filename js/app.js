@@ -67,11 +67,13 @@
     live = { pair, signalT, dir, timer: null, refPrice: store[pair][store[pair].length - 2].c };
     $('livecard').hidden = false;
     $('livepair').textContent = pair;
+    $('term').value = ''; $('termnote').textContent = '';
+    initChart();
     updateLive();
     const demo = S.source === 'demo';
     live.timer = setInterval(demo ? tickLive : pollLive, demo ? 1500 : 20000);
   }
-  function stopLive() { if (live && live.timer) clearInterval(live.timer); live = null; }
+  function stopLive() { if (live && live.timer) clearInterval(live.timer); live = null; destroyChart(); }
 
   function tickLive() {
     if (!live) return;
@@ -97,7 +99,89 @@
     $('livenote').innerHTML = fresh
       ? 'Сигнал актуален ещё около ' + remain + ' с (до закрытия свечи). Пунктир: цена на момент сигнала ' + live.refPrice.toFixed(dec) + '. Время свечей в UTC.'
       : '<span class="warn">Сигнал устарел: закрылась новая свеча. Нажми «Подобрать пару» ещё раз.</span>';
-    drawChart(c);
+    renderChart(c);
+    termCheck();
+  }
+
+  /* ---------- сверка цены с терминалом ---------- */
+  function termCheck() {
+    const note = $('termnote');
+    if (!live) { note.textContent = ''; return; }
+    const v = parseFloat($('term').value);
+    if (!isFinite(v)) { note.textContent = ''; return; }
+    const c = store[live.pair], last = c[c.length - 1];
+    const pip = live.pair.includes('JPY') ? 0.01 : 0.0001, dec = live.pair.includes('JPY') ? 3 : 5;
+    const m = Math.min(20, c.length - 1);
+    let rng = 0; for (let j = 1; j <= m; j++) rng += c[c.length - 1 - j].h - c[c.length - 1 - j].l;
+    const avg = rng / m / pip, diff = (v - last.c) / pip;
+    const ratio = avg > 0 ? Math.abs(diff) / avg : 0;
+    let msg = 'Терминал ' + v.toFixed(dec) + ', источник ' + last.c.toFixed(dec) + ': расхождение ' + (Math.round(diff * 10) / 10 || 0).toFixed(1) +
+      ' пп при среднем размахе свечи ' + avg.toFixed(1) + ' пп. ';
+    let warn = false;
+    if (ratio > 0.5) { msg += 'Расхождение больше половины типичной свечи: цены заметно разные, сигнал может не подходить.'; warn = true; }
+    else if (ratio > 0.25) { msg += 'Расхождение заметное, учитывай его при входе.'; warn = true; }
+    else msg += 'Расхождение небольшое.';
+    if (avg > 0 && ((v - live.refPrice) / pip) * live.dir > 0.5 * avg) {
+      msg += ' Цена уже ушла в сторону сигнала дальше, чем на полсвечи: вход запоздал.'; warn = true;
+    }
+    note.className = 'note' + (warn ? ' warn' : '');
+    note.textContent = msg;
+  }
+
+  /* ---------- график: Lightweight Charts, запасной вариант canvas ---------- */
+  let lw = null;
+  const sec = (t) => Math.floor(Data.parseT(t) / 1000);
+  const bar = (k) => ({ time: sec(k.t), open: k.o, high: k.h, low: k.l, close: k.c });
+  function cssVar(n, d) { try { return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d; } catch (e) { return d; } }
+
+  function destroyChart() {
+    if (lw) { try { lw.chart.remove(); } catch (e) {} lw = null; }
+  }
+  function useCanvas(on) { $('cv').hidden = !on; $('lw').hidden = on; }
+
+  function initChart() {
+    destroyChart();
+    const LC = window.LightweightCharts;
+    if (!LC || !live) { useCanvas(true); return; }
+    try {
+      useCanvas(false);
+      const grid = { color: 'rgba(138,147,166,.12)' };
+      const chart = LC.createChart($('lw'), {
+        width: $('lw').clientWidth || 340, height: 240,
+        layout: { background: { color: 'transparent' }, textColor: cssVar('--text', '#e8ecf3') },
+        grid: { vertLines: grid, horzLines: grid },
+        rightPriceScale: { borderVisible: false },
+        timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+      });
+      const candle = chart.addCandlestickSeries({
+        upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      });
+      const lineOpts = (color) => ({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const e9 = chart.addLineSeries(lineOpts('#f59e0b')), e21 = chart.addLineSeries(lineOpts('#3b82f6'));
+      candle.createPriceLine({ price: live.refPrice, color: live.dir > 0 ? '#22c55e' : '#ef4444', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'сигнал' });
+      lw = { chart, candle, e9, e21, fitted: false, lastT: 0, n: 0 };
+    } catch (e) { destroyChart(); useCanvas(true); }
+  }
+
+  function renderChart(c) {
+    if (!lw) { drawChart(c); return; }
+    try {
+      const n = c.length, last = c[n - 1], t = sec(last.t);
+      const cl = c.map(x => x.c), e9 = Indicators.ema(cl, 9), e21 = Indicators.ema(cl, 21);
+      if (lw.fitted && t === lw.lastT && n === lw.n) {
+        lw.candle.update(bar(last));
+        lw.e9.update({ time: t, value: e9[n - 1] });
+        lw.e21.update({ time: t, value: e21[n - 1] });
+      } else {
+        const range = lw.fitted ? lw.chart.timeScale().getVisibleLogicalRange() : null;
+        lw.candle.setData(c.map(bar));
+        lw.e9.setData(c.map((k, i) => ({ time: sec(k.t), value: e9[i] })));
+        lw.e21.setData(c.map((k, i) => ({ time: sec(k.t), value: e21[i] })));
+        lw.chart.timeScale().setVisibleLogicalRange(range || { from: n - 70, to: n + 4 });
+        lw.fitted = true;
+      }
+      lw.lastT = t; lw.n = n;
+    } catch (e) { destroyChart(); useCanvas(true); drawChart(c); }
   }
 
   function drawChart(c) {
@@ -166,6 +250,10 @@
   $('key').onchange = (e) => { S.key = e.target.value.trim(); save(); };
   $('payout').onchange = (e) => { S.payout = Math.min(100, Math.max(50, +e.target.value || 85)); save(); sync(); };
   $('scan').onclick = scan;
-  window.addEventListener('resize', () => { if (live) updateLive(); });
+  $('term').oninput = termCheck;
+  window.addEventListener('resize', () => {
+    if (!live) return;
+    if (lw) { try { lw.chart.resize($('lw').clientWidth || 340, 240); } catch (e) {} } else updateLive();
+  });
   sync();
 })();
