@@ -114,6 +114,6 @@
     return { conv: mid(conv), base: mid(base) };
   }
 
-  root.Indicators = { sma, ema, rsi, macd, boll, atr, keltner, stoch, ichimoku };
+  root.Indicators = { sma, ema, rsi, macd, boll, atr, keltner, stoch, ichimoku, rollMax, rollMin };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Indicators;
 })(typeof window !== 'undefined' ? window : globalThis);

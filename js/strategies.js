@@ -97,6 +97,32 @@
         return build(c, i => crossUp(t.conv, t.base, i) ? 1 : crossDown(t.conv, t.base, i) ? -1 : 0);
       },
     },
+    {
+      id: 'score',
+      name: 'Скоринг 75+: тренд, RSI, MACD, импульс, пробой, ATR',
+      desc: 'Баллы набираются только за условия в сторону сигнала: тренд EMA 50 (20), RSI 14 в зоне 50–65 для роста или 35–50 для падения (15), MACD (15), три свечи подряд в ту же сторону (10), пробой максимума или минимума 20 прошлых свечей (20), ATR выше среднего за 100 свечей (10). Сигнал появляется в момент, когда сумма впервые достигла 75.',
+      signals(c) {
+        const k = cols(c), x = k.c;
+        const r = I.rsi(x, 14), m = I.macd(x), e = I.ema(x, 50);
+        const a = I.atr(k.h, k.l, x, 14), aAvg = I.sma(a, 100);
+        const hh = I.rollMax(k.h, 20), ll = I.rollMin(k.l, 20);
+        const score = (i, d) => {
+          if (i < 3 || !fin(r[i]) || !fin(a[i]) || !fin(aAvg[i]) || !fin(hh[i - 1]) || !fin(ll[i - 1])) return 0;
+          if ((x[i] > e[i] ? 1 : -1) !== d) return 0; // направление задаёт тренд, как в исходном коде
+          let s = 20;
+          if (d > 0 ? (r[i] > 50 && r[i] < 65) : (r[i] > 35 && r[i] < 50)) s += 15;
+          if (d > 0 ? m.line[i] > m.signal[i] : m.line[i] < m.signal[i]) s += 15;
+          if (d > 0 ? (x[i] > x[i - 1] && x[i - 1] > x[i - 2]) : (x[i] < x[i - 1] && x[i - 1] < x[i - 2])) s += 10;
+          if (d > 0 ? x[i] > hh[i - 1] : x[i] < ll[i - 1]) s += 20; // настоящий пробой: максимум считается без текущей свечи
+          if (a[i] > aAvg[i]) s += 10;
+          return s;
+        };
+        return build(c, i => {
+          for (const d of [1, -1]) if (score(i, d) >= 75 && score(i - 1, d) < 75) return d;
+          return 0;
+        });
+      },
+    },
   ];
 
   root.Strategies = { list, WARMUP };
