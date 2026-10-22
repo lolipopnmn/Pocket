@@ -1,46 +1,99 @@
+/* Палитра: петроль и мята. Направление дублируется стрелкой и словом, а не только цветом. */
 :root{
-  --bg:var(--tg-theme-bg-color,#0e1117);
-  --card:var(--tg-theme-secondary-bg-color,#171b24);
-  --text:var(--tg-theme-text-color,#e8ecf3);
-  --hint:var(--tg-theme-hint-color,#8a93a6);
-  --accent:var(--tg-theme-button-color,#3b82f6);
-  --accent-text:var(--tg-theme-button-text-color,#fff);
-  --buy:#22c55e; --sell:#ef4444; --wait:#8a93a6;
-  --line:rgba(138,147,166,.2);
+  --bg:#0F1B22;
+  --surface:#162630;
+  --surface-2:#1D3342;
+  --line:#2A4352;
+  --text:#E6EEF1;
+  --muted:#8FA6B0;
+  --up:#3DD6A3;
+  --down:#FF7A6B;
+  --warn:#F2B84B;
+  --accent:#6FB7FF;
+  --on-accent:#0F1B22;
+  color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:520px;margin:0 auto;padding:12px 16px 32px}
-h1{font-size:18px;margin:4px 0 12px;display:flex;justify-content:space-between;align-items:center}
-h1 small{font-weight:400;color:var(--hint);font-size:12px}
-select,input,button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;outline:none}
-select,input{width:100%}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+.wrap{max-width:520px;margin:0 auto;padding:14px 16px 40px;
+  padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+
+button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:10px 12px;min-height:44px}
+input,select{width:100%}
 button{cursor:pointer}
-.tfs{display:flex;gap:6px;margin-bottom:10px}
-.tfs button{flex:1;padding:8px 0}
-.tfs button.on{background:var(--accent);color:var(--accent-text);border-color:transparent}
-.bigbtn{width:100%;padding:16px;font-size:17px;font-weight:700;background:var(--accent);color:var(--accent-text);border:none;border-radius:16px}
-.bigbtn:disabled{opacity:.55}
-.status{min-height:20px;margin:8px 2px 10px;font-size:13px;color:var(--hint)}
-.card{background:var(--card);border-radius:18px;padding:16px;margin-bottom:12px}
-.signal{text-align:center;padding:22px 16px}
-.signal .pair{font-size:15px;color:var(--hint);letter-spacing:.5px}
-.signal .dir{font-size:40px;font-weight:800;letter-spacing:1px;margin:2px 0}
-.signal.buy .dir{color:var(--buy)} .signal.sell .dir{color:var(--sell)} .signal.wait .dir{color:var(--wait);font-size:28px}
-.signal .exp{font-size:20px;font-weight:700}
-.signal .sub{color:var(--hint);margin-top:6px;font-size:13px}
-.livehead{display:flex;justify-content:space-between;margin-bottom:8px}
-.livehead span{color:var(--hint)}
-canvas{width:100%;height:210px;display:block}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Шапка */
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.top h1{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
+  border:1px solid var(--line);border-radius:999px;padding:4px 11px 4px 9px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.pill.live i{background:var(--up)}
+
+/* Таймфрейм и кнопка */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--surface);border-radius:14px;margin-bottom:10px}
+.seg button{border:0;background:transparent;color:var(--muted);border-radius:10px;min-height:38px;font-weight:600}
+.seg button.on{background:var(--surface-2);color:var(--text)}
+.go{width:100%;min-height:54px;border:0;border-radius:14px;background:var(--accent);color:var(--on-accent);font-size:17px;font-weight:700}
+.go:disabled{opacity:.6}
+.prog{height:3px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+.status{min-height:20px;margin:8px 0 12px;font-size:13px;color:var(--muted)}
+
+/* Билет с сигналом: единственный выразительный элемент страницы */
+.ticket{--dir:var(--muted);position:relative;display:grid;grid-template-columns:1fr 104px;gap:6px 12px;
+  background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--dir);border-radius:16px;
+  padding:16px 14px 0 16px;margin-bottom:14px;animation:ticket-in .28s ease-out}
+.ticket.up{--dir:var(--up)}
+.ticket.down{--dir:var(--down)}
+.ticket.stale{opacity:.55}
+.tk-main{align-self:center}
+.tk-pair{font-size:15px;color:var(--muted);font-weight:600}
+.tk-dir{font-size:34px;line-height:1.1;font-weight:750;letter-spacing:-.02em;color:var(--dir);margin:2px 0}
+.ticket.none .tk-dir{font-size:26px;color:var(--text)}
+.tk-exp{font-size:17px;font-weight:600}
+.ring{position:relative;width:104px;height:104px;align-self:center}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .track{fill:none;stroke:var(--line);stroke-width:6}
+.ring .arc{fill:none;stroke:var(--dir);stroke-width:6;stroke-linecap:round;stroke-dasharray:276.46;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear}
+.ring .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.ring .glyph{font-size:26px;color:var(--dir)}
+.ring .sec{font-size:13px;color:var(--muted);margin-top:2px}
+.tk-why{grid-column:1 / -1;border-top:1px dashed var(--line);padding:12px 0 0}
+.tk-why p{margin:0 0 10px;font-size:14px;color:var(--muted);max-width:60ch}
+.chips{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.chips li{background:var(--surface-2);border-radius:999px;padding:4px 11px;font-size:13px}
+.chips small{color:var(--muted);font-size:12px}
+.tk-foot{grid-column:1 / -1;border-top:1px dashed var(--line);margin:0;padding:10px 0 12px;font-size:14px}
+.near{margin:0 0 12px;padding:0;list-style:none;font-size:14px}
+.near li{padding:5px 0;border-top:1px solid var(--line)}
+.near li:first-child{border-top:0}
+
+/* Остальное: плоские секции с тонкой линией */
+section{border-top:1px solid var(--line);padding:16px 0 4px;margin-top:6px}
+section h2{margin:0 0 10px;font-size:16px;font-weight:650}
+.chartbox{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 14px}
+.chead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.chead b{font-size:16px}
+.chead span{font-size:20px;font-weight:650}
 #lw{width:100%;height:240px}
+canvas{width:100%;height:210px;display:block}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
 table{width:100%;border-collapse:collapse;font-size:14px}
-td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top} tr:last-child td{border:none}
-td:last-child{text-align:right;font-weight:600;white-space:nowrap;padding-left:8px}
-.b{color:var(--buy)} .s{color:var(--sell)} .n{color:var(--wait)}
-.note{font-size:12.5px;color:var(--hint);margin-top:8px}
-.warn{color:#f59e0b}
-details summary{cursor:pointer;color:var(--hint);padding:4px 0;font-size:14px}
-label{display:block;font-size:13px;color:var(--hint);margin:10px 0 4px}
-.disc{font-size:11.5px;color:var(--hint);text-align:center;margin-top:18px;line-height:1.5}
-.h2{font-weight:700;margin:0 0 10px;font-size:15px}
+td{padding:8px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border:0}
+td:last-child{text-align:right;white-space:nowrap;padding-left:10px}
+td small,.note small{color:var(--muted)}
+.b{color:var(--up)} .s{color:var(--down)} .n{color:var(--muted)}
+.note{font-size:13px;color:var(--muted);margin:8px 0 0;max-width:62ch}
+.warn{color:var(--warn)}
+details summary{cursor:pointer;font-weight:600;padding:6px 0;min-height:32px}
+.ghost{margin-top:10px;background:transparent}
+.disc{font-size:12px;color:var(--muted);margin:22px 0 0;line-height:1.55;max-width:62ch}
+
+@keyframes ticket-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

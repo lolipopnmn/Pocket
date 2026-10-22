@@ -61,4 +61,73 @@ for (const s of Strategies.list) {
 const ranked = Scanner.rank([{ pair: 'A', res: { best: null } }, { pair: 'B', res: { best: { score: 0.1 } } }, { pair: 'C', res: { best: { score: 0.3 } } }]);
 ok(ranked.map(r => r.pair).join('') === 'CB', 'ранжирование');
 
+
+// ---- Правило «минимум N совпавших»: реальные стратегии на многих рядах ----
+{
+  let sawBest = 0, sawPartial = 0;
+  for (let salt = 0; salt < 60; salt++) for (const pair of ['EUR/USD', 'GBP/USD', 'USD/JPY']) {
+    const cs = Data.genDemo(pair, '1m', 500 + salt).slice(0, -1);
+    const r2 = Scanner.analyzePair(cs, 85, 2), r1 = Scanner.analyzePair(cs, 85, 1), r3 = Scanner.analyzePair(cs, 85, 3);
+    if (r2.best) {
+      sawBest++;
+      ok(r2.best.count >= 2 && r2.best.contrib.length === r2.best.count, 'совпало не меньше двух');
+      ok(r2.best.contrib.every(x => x.ok), 'совпавшие стратегии подтверждены на обеих половинах');
+      ok(!r2.per.some(p => p.dir === -r2.best.dir && p.stats[r2.best.h].ok), 'подтверждённых против нет');
+      ok(r2.partial === null, 'при сигнале «почти» не показывается');
+      ok(r1.best !== null, 'сигнал при минимуме 2 есть и при минимуме 1');
+    }
+    if (r3.best) ok(r2.best !== null && r3.best.count >= 3, 'минимум 3 строже минимума 2');
+    if (!r2.best && r2.partial) { sawPartial++; ok(r2.partial.count < 2 && r2.partial.count >= 1, 'partial: меньше нужного числа'); }
+    // окно действия: сторона стратегии равна последнему событию за 3 последние свечи
+    Strategies.list.forEach((st, k) => {
+      const sig = st.signals(cs), idx = cs.length - 1;
+      let exp = 0, age = 0;
+      for (let j = 0; j < Scanner.LOOKBACK; j++) if (sig[idx - j]) { exp = sig[idx - j]; age = j; break; }
+      ok(r2.per[k].dir === exp && (exp === 0 || r2.per[k].age === age), st.id + ': окно действия');
+    });
+  }
+  console.log('\nМинимум 2 стратегии: сигналов', sawBest, '| «почти» (меньше нужного):', sawPartial, '(из 180 сканов)');
+}
+
+// ---- Управляемые стратегии: идеальные «оракулы» на предыдущем шаге, чтобы проверить логику выбора ----
+{
+  const mock = (id, kind, lastDir, lastIdxShift = 0) => ({ id, name: id, signals(c) {
+    const sg = new Int8Array(c.length);
+    for (let i = Strategies.WARMUP; i < c.length - 1; i++) {
+      if (kind === 'up' && c[i + 1].c > c[i].c) sg[i] = 1;
+      if (kind === 'down' && c[i + 1].c < c[i].c) sg[i] = -1;
+    }
+    for (let j = 0; j < 5; j++) sg[c.length - 1 - j] = 0;
+    if (lastDir) sg[c.length - 1 - lastIdxShift] = lastDir;
+    return sg;
+  } });
+  const cs = Data.genDemo('EUR/USD', '1m', 777);
+  const saved = Strategies.list.splice(0);
+  try {
+    const run = (mocks, minAgree) => { Strategies.list.splice(0, Strategies.list.length, ...mocks); return Scanner.analyzePair(cs, 85, minAgree); };
+
+    let r = run([mock('a', 'up', 1)], 2);
+    ok(r.best === null && r.partial && r.partial.count === 1 && r.partial.dir === 1, 'одна стратегия при минимуме 2: сигнала нет, есть «почти»');
+    r = run([mock('a', 'up', 1)], 1);
+    ok(r.best && r.best.dir === 1 && r.best.h === 1 && r.best.count === 1, 'минимум 1: сигнал вверх на 1 свечу');
+    r = run([mock('a', 'up', 1), mock('b', 'up', 1)], 2);
+    ok(r.best && r.best.count === 2 && r.best.dir === 1, 'две стратегии в одну сторону: сигнал');
+    r = run([mock('a', 'up', 1), mock('b', 'up', 1)], 3);
+    ok(r.best === null, 'две стратегии при минимуме 3: сигнала нет');
+    r = run([mock('a', 'up', 1), mock('b', 'up', 1), mock('c', 'down', -1)], 2);
+    ok(r.best === null, 'подтверждённая стратегия против отменяет сигнал');
+    r = run([mock('a', 'up', 1), mock('b', 'up', 0)], 2);
+    ok(r.best === null && r.partial.count === 1, 'вторая стратегия не сработала: сигнала нет');
+    r = run([mock('a', 'up', 1, 2), mock('b', 'up', 1, 0)], 2);
+    ok(r.best && r.best.count === 2 && r.per[0].age === 2, 'сигнал двухсвечной давности ещё действует');
+    r = run([mock('a', 'up', 1, 3), mock('b', 'up', 1, 0)], 2);
+    ok(r.best === null && r.per[0].dir === 0, 'сигнал трёхсвечной давности уже не действует');
+    r = run([mock('a', 'up', 1), mock('b', 'up', 1), mock('c', 'down', -1)], 2);
+    ok(Scanner.nearMiss([{ pair: 'X', res: r }]).length === 0, 'пара без partial не попадает в «ближе всего»');
+  } finally {
+    Strategies.list.splice(0, Strategies.list.length, ...saved);
+  }
+  ok(Strategies.list.length === 8, 'список стратегий восстановлен');
+}
+
 console.log('\nВсе проверки пройдены:', checks);
