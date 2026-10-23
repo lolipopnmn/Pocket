@@ -30,6 +30,39 @@
   };
   const plural = (n) => n + ' ' + ru(n, 'стратегия', 'стратегии', 'стратегий');
 
+  /* ---------- табло пар ---------- */
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const board = {};            // pair -> { state: idle|busy|sig|near|none|off, dir, n, spark, why }
+  let lastResults = [], lastNotes = '', selected = null;
+
+  function spark(pair) {
+    const c = store[pair]; if (!c) return '';
+    const a = c.slice(-40).map(x => x.c), lo = Math.min(...a), hi = Math.max(...a), span = hi - lo || 1e-9;
+    const pts = a.map((v, i) => (i / (a.length - 1) * 60).toFixed(1) + ',' + (14 - (v - lo) / span * 12).toFixed(1)).join(' ');
+    return '<svg class="spark" viewBox="0 0 60 16" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + pts + '"/></svg>';
+  }
+  // точки: сколько стратегий совпало из нужного числа (●●○ = совпало 2, нужно 3)
+  const dots = (n, need) => { let o = ''; for (let i = 0; i < Math.max(n, need); i++) o += i < n ? '●' : '○'; return o; };
+
+  function renderBoard() {
+    $('board').innerHTML = Object.keys(PAIRS).map(pair => {
+      const b = board[pair] || { state: 'idle' };
+      let mid = '';
+      if (b.state === 'sig' || b.state === 'near') mid = '<b>' + arrow(b.dir) + '</b><em class="dt">' + dots(b.n, S.minAgree) + '</em>';
+      else if (b.state === 'none') mid = '<i>нет сигнала</i>';
+      else if (b.state === 'off') mid = '<i>' + (b.why || 'нет данных') + '</i>';
+      else if (b.state === 'busy') mid = '<i>анализ…</i>';
+      const can = b.state === 'sig' || b.state === 'near' || b.state === 'none';
+      return '<button class="tile ' + b.state + (b.dir > 0 ? ' up' : b.dir < 0 ? ' down' : '') + (b.fresh ? ' pop' : '') + (pair === selected ? ' sel' : '') +
+        '" data-pair="' + pair + '" aria-label="' + pair + '"' + (can ? '' : ' disabled') + '><span class="tp">' + pair + '</span>' + (b.spark || '') +
+        '<span class="tm">' + mid + '</span></button>';
+    }).join('');
+    for (const k of Object.keys(board)) board[k].fresh = false;
+  }
+  function setTile(pair, state, extra) { board[pair] = Object.assign({ state, fresh: state !== 'idle' && state !== 'busy' }, extra); renderBoard(); }
+  function resetBoard() { for (const pair of Object.keys(PAIRS)) board[pair] = { state: 'idle' }; selected = null; renderBoard(); }
+  const tileFor = (res) => res.best ? { state: 'sig', dir: res.best.dir, n: res.best.count } : res.partial ? { state: 'near', dir: res.partial.dir, n: res.partial.count } : { state: 'none' };
+
   /* ---------- журнал сигналов (хранится на устройстве) ---------- */
   const JKEY = 'pocketfx_journal';
   const tfMsMap = Object.fromEntries(Object.keys(TFS).map(t => [t, TFS[t].ms]));
@@ -80,7 +113,7 @@
   function showNone(results, stale, errors) {
     const near = Scanner.nearMiss(results).slice(0, 3);
     const nearHtml = near.length
-      ? '<p>Ближе всего, но входить по ним нельзя:</p><ul class="near">' + near.map(r => {
+      ? '<p>Ближе всего, но входить по ним нельзя (нажми на плитку, чтобы посмотреть):</p><ul class="near">' + near.map(r => {
           const p = r.res.partial;
           return '<li><b>' + r.pair + '</b> <span class="' + dirCls(p.dir) + '">' + dirWord(p.dir).toLowerCase() + '</span> на ' + expTxt(p.h) +
             ': только ' + p.contrib.map(c => short(c.id, c.name)).join(', ') + '</li>';
@@ -90,8 +123,8 @@
       '<article class="ticket none"><div class="tk-main"><div class="tk-dir">Не заходить</div>' +
       '<div class="tk-exp">Проверено пар: ' + results.length + '</div></div>' +
       '<div class="tk-why"><p>Ни у одной пары не совпали минимум ' + S.minAgree + ' стратегии в одну сторону с подтверждённым преимуществом. ' +
-      'Чаще всего это нормальный результат: лучше подождать следующих свечей.</p>' + nearHtml + '</div></article>' + notes(stale, errors);
-    $('livecard').hidden = true; $('rankcard').hidden = true; $('stratcard').hidden = true;
+      'Чаще всего это нормальный результат: лучше подождать следующих свечей.</p>' + nearHtml + '</div></article>' + lastNotes;
+    $('livecard').hidden = true; $('stratcard').hidden = true;
   }
 
   function showBlocked(rk) {
@@ -105,42 +138,57 @@
       '<div class="tk-exp">Сегодня: побед ' + b.wins + ', проигрышей ' + b.losses + '</div></div>' +
       '<div class="tk-why"><p>' + why + ' Новые сигналы остановлены: после серии неудач хочется отыграться, и именно так теряют депозит. ' +
       'Сделай перерыв и вернись завтра. Лимиты можно изменить в настройках, но лучше этого не делать.</p></div></article>';
-    $('livecard').hidden = true; $('rankcard').hidden = true; $('stratcard').hidden = true;
+    $('livecard').hidden = true; $('stratcard').hidden = true;
   }
 
-  function showTop(top, ranked, stale, errors) {
-    const { pair, res } = top, b = res.best, cls = b.dir > 0 ? 'up' : 'down';
-    const chips = b.contrib.map(c => '<li>' + short(c.id, c.name) + (c.age ? ' <small>' + c.age + ' св. назад</small>' : '') + '</li>').join('');
-    $('result').hidden = false;
-    $('result').innerHTML =
-      '<article class="ticket ' + cls + '" id="ticket">' +
-      '<div class="tk-main"><div class="tk-pair">' + pair + '</div><div class="tk-dir">' + dirWord(b.dir) + '</div>' +
-      '<div class="tk-exp">на ' + expTxt(b.h) + '</div></div>' + ring(arrow(b.dir)) +
-      '<div class="tk-why"><p>Совпали ' + plural(b.count) + ' (нужно минимум ' + res.minAgree + '), подтверждённых против нет. ' +
-      'Чтобы не терять, нужно угадывать не реже ' + pct(res.be) + '.</p><p>' + stakeTxt() + '</p><ul class="chips">' + chips + '</ul></div>' +
-      '<p class="tk-foot" id="tkfoot"></p></article>' + notes(stale, errors);
+  const chipsOf = (list) => '<ul class="chips">' + list.map(c => '<li>' + short(c.id, c.name) + (c.age ? ' <small>' + c.age + ' св. назад</small>' : '') + '</li>').join('') + '</ul>';
 
-    const rest = ranked.slice(1);
-    $('rankcard').hidden = rest.length === 0;
-    $('rank').innerHTML = rest.map(r => {
-      const x = r.res.best;
-      return '<tr><td><b>' + r.pair + '</b></td><td><span class="' + dirCls(x.dir) + '">' + dirWord(x.dir) + '</span> на ' + expTxt(x.h) +
-        ' <small>' + plural(x.count) + '</small></td></tr>';
-    }).join('');
-
+  function renderStrats(res, h) {
     $('stratcard').hidden = false;
     $('strats').innerHTML = res.per.map(p => {
-      const st = p.stats[b.h];
+      const st = p.stats[h];
       const flag = p.dir ? ' <span class="' + dirCls(p.dir) + '">' + arrow(p.dir) + '</span>' : '';
       if (p.disabled) return '<tr><td>' + short(p.id, p.name) + '</td><td><small class="warn">отключена по журналу</small></td></tr>';
       return '<tr><td>' + short(p.id, p.name) + flag + '</td><td>' + pct(st.adj) + ' из ' + pct(res.be) + ' <small>(' + st.n + ')</small>' + (st.ok ? ' <span class="b">✓</span>' : '') + '</td></tr>';
     }).join('');
+  }
 
-    if (S.source !== 'demo') {
+  function ticketSignal(pair, res) {
+    const b = res.best;
+    $('result').hidden = false;
+    $('result').innerHTML =
+      '<article class="ticket ' + (b.dir > 0 ? 'up' : 'down') + '" id="ticket">' +
+      '<div class="tk-main"><div class="tk-pair">' + pair + '</div><div class="tk-dir">' + dirWord(b.dir) + '</div>' +
+      '<div class="tk-exp">на ' + expTxt(b.h) + '</div></div>' + ring(arrow(b.dir)) +
+      '<div class="tk-why"><p>Совпали ' + plural(b.count) + ' (нужно минимум ' + res.minAgree + '), подтверждённых против нет. ' +
+      'Чтобы не терять, нужно угадывать не реже ' + pct(res.be) + '.</p><p>' + stakeTxt() + '</p>' + chipsOf(b.contrib) + '</div>' +
+      '<p class="tk-foot" id="tkfoot"></p></article>' + lastNotes;
+  }
+
+  function ticketNoSignal(pair, res) {
+    const p = res.partial;
+    $('result').hidden = false;
+    $('result').innerHTML =
+      '<article class="ticket none"><div class="tk-main"><div class="tk-pair">' + pair + '</div><div class="tk-dir">Сигнала нет</div>' +
+      '<div class="tk-exp">' + (p ? dirWord(p.dir).toLowerCase() + ' на ' + expTxt(p.h) + ', но этого мало' : 'Стратегии молчат') + '</div></div>' +
+      '<div class="tk-why"><p>' + (p
+        ? 'Совпала ' + plural(p.count) + ', а нужно минимум ' + res.minAgree + '. Входить по этой паре нельзя.'
+        : 'Сейчас ни одна подтверждённая стратегия не дала сигнала по этой паре.') + '</p>' + (p ? chipsOf(p.contrib) : '') + '</div></article>' + lastNotes;
+  }
+
+  // Показ выбранной пары: билет, таблица стратегий, график. Сигнал записывается в журнал в тот момент, когда его показали.
+  function showPair(pair) {
+    const r = lastResults.find(x => x.pair === pair);
+    if (!r) return;
+    const res = r.res, b = res.best;
+    selected = pair; renderBoard();
+    if (b) ticketSignal(pair, res); else ticketNoSignal(pair, res);
+    renderStrats(res, b ? b.h : res.partial ? res.partial.h : 2);
+    if (b && S.source !== 'demo') {
       journal = Journal.add(journal, { pair, tf: S.tf, t0: res.last.t, price: res.last.c, dir: b.dir, h: b.h, by: b.contrib.map(c => c.id) });
       saveJ(); renderJournal();
     }
-    startLive(pair, res.last.t, b.dir);
+    startLive(pair, res.last.t, b ? b.dir : 0);
   }
 
   /* ---------- живой график и обратный отсчёт ---------- */
@@ -192,7 +240,7 @@
     const c = store[live.pair], last = c[c.length - 1];
     const dec = live.pair.includes('JPY') ? 3 : 5;
     $('liveprice').textContent = last.c.toFixed(dec);
-    $('livenote').textContent = 'Пунктир: цена на момент сигнала ' + live.refPrice.toFixed(dec) + '. Время свечей в UTC.';
+    $('livenote').textContent = (live.dir ? 'Пунктир: цена на момент сигнала ' : 'Пунктир: закрытие последней свечи ') + live.refPrice.toFixed(dec) + '. Время свечей в UTC.';
     renderChart(c);
     termCheck();
     tickCountdown();
@@ -224,7 +272,8 @@
   }
 
   /* ---------- график: Lightweight Charts, запасной вариант canvas ---------- */
-  const UP = '#3DD6A3', DOWN = '#FF7A6B';
+  const UP = '#3DD6A3', DOWN = '#FF7A6B', FLAT = '#8FA6B0';
+  const refColor = () => (live.dir > 0 ? UP : live.dir < 0 ? DOWN : FLAT);
   let lw = null;
   const sec = (t) => Math.floor(Data.parseT(t) / 1000);
   const bar = (k) => ({ time: sec(k.t), open: k.o, high: k.h, low: k.l, close: k.c });
@@ -253,7 +302,7 @@
       });
       const lineOpts = (color) => ({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       const e9 = chart.addLineSeries(lineOpts('#F2B84B')), e21 = chart.addLineSeries(lineOpts('#6FB7FF'));
-      candle.createPriceLine({ price: live.refPrice, color: live.dir > 0 ? UP : DOWN, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'сигнал' });
+      candle.createPriceLine({ price: live.refPrice, color: refColor(), lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'сигнал' });
       lw = { chart, candle, e9, e21, fitted: false, lastT: 0, n: 0 };
     } catch (e) { destroyChart(); useCanvas(true); }
   }
@@ -301,7 +350,7 @@
     }
     line(e9, '#F2B84B'); line(e21, '#6FB7FF');
     if (live) {
-      g.beginPath(); g.setLineDash([4, 4]); g.strokeStyle = live.dir > 0 ? UP : DOWN; g.lineWidth = 1;
+      g.beginPath(); g.setLineDash([4, 4]); g.strokeStyle = refColor(); g.lineWidth = 1;
       g.moveTo(0, py(live.refPrice)); g.lineTo(w, py(live.refPrice)); g.stroke(); g.setLineDash([]);
     }
   }
@@ -311,32 +360,40 @@
     if (busy) return;
     busy = true; stopLive(); S.n++;
     $('scan').disabled = true; $('scanlabel').textContent = 'Анализирую…';
-    $('progwrap').hidden = false; $('prog').style.width = '0%';
+    $('result').hidden = true; $('livecard').hidden = true; $('stratcard').hidden = true;
+    resetBoard();
     const pairs = Object.keys(PAIRS), results = [], stale = [], errors = [];
     for (let k = 0; k < pairs.length; k++) {
       const pair = pairs[k];
       $('status').textContent = 'Анализ ' + pair + ', ' + (k + 1) + ' из ' + pairs.length;
-      $('prog').style.width = Math.round(k / pairs.length * 100) + '%';
+      setTile(pair, 'busy');
       try {
+        if (S.source === 'demo') await sleep(90); // в демо данные мгновенные: короткая пауза, чтобы было видно, как идёт проверка
         const candles = S.source === 'demo' ? Data.genDemo(pair, S.tf, S.n, Data.HISTORY) : await Data.fetchTwelve(pair, S.tf, S.key);
-        if (S.source !== 'demo' && Data.isStale(candles, S.tf)) { stale.push(pair); continue; }
+        if (S.source !== 'demo' && Data.isStale(candles, S.tf)) { stale.push(pair); setTile(pair, 'off', { why: 'нет свечей' }); continue; }
         store[pair] = candles;
-        results.push({ pair, res: Scanner.analyzePair(candles.slice(0, -1), S.payout, S.minAgree, offList()) });
+        const res = Scanner.analyzePair(candles.slice(0, -1), S.payout, S.minAgree, offList());
+        results.push({ pair, res });
+        setTile(pair, tileFor(res).state, Object.assign(tileFor(res), { spark: spark(pair) }));
       } catch (e) {
         errors.push(pair + ': ' + e.message);
+        setTile(pair, 'off', { why: 'ошибка' });
         if (/ключ/i.test(e.message)) break;
       }
     }
     if (S.source !== 'demo') { journal = Journal.resolve(journal, store, tfMsMap, S.tf); saveJ(); renderJournal(); }
     const ranked = Scanner.rank(results);
-    $('progwrap').hidden = true;
+    lastResults = results; lastNotes = notes(stale, errors);
     $('status').textContent = S.source === 'demo' ? 'Демо-режим: данные случайные, результат ничего не говорит о рынке.' : '';
     const rk = S.source !== 'demo' ? riskNow() : null;
-    if (rk && rk.blocked) showBlocked(rk);
-    else if (ranked.length) showTop(ranked[0], ranked, stale, errors);
+    let haptic = 'light';
+    if (rk && rk.blocked) { lastResults = []; resetBoard(); showBlocked(rk); }
+    else if (ranked.length) { showPair(ranked[0].pair); haptic = 'success'; }
     else showNone(results, stale, errors);
     busy = false; $('scan').disabled = false; $('scanlabel').textContent = 'Подобрать пару';
-    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {} }
+    if (tg && tg.HapticFeedback) {
+      try { haptic === 'success' ? tg.HapticFeedback.notificationOccurred('success') : tg.HapticFeedback.impactOccurred('light'); } catch (e) {}
+    }
   }
 
   /* ---------- интерфейс ---------- */
@@ -371,6 +428,13 @@
     }
   };
   $('scan').onclick = scan;
+  $('board').onclick = (e) => {
+    let el = e.target;
+    while (el && !(el.dataset && el.dataset.pair)) el = el.parentNode;
+    if (!el || busy) return;
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch (err) {} }
+    showPair(el.dataset.pair);
+  };
   $('jclear').onclick = () => { journal = []; saveJ(); renderJournal(); };
   $('term').oninput = termCheck;
   window.addEventListener('resize', () => {
@@ -379,5 +443,6 @@
   });
   setInterval(tickCountdown, 1000);
   sync();
+  resetBoard();
   renderJournal();
 })();

@@ -17,7 +17,7 @@
 
   <div class="seg" id="tfs" role="group" aria-label="Таймфрейм свечей"></div>
   <button class="go" id="scan"><span id="scanlabel">Подобрать пару</span></button>
-  <div class="prog" id="progwrap" hidden><i id="prog"></i></div>
+  <div class="board" id="board" role="group" aria-label="Валютные пары"></div>
   <p class="status" id="status" role="status"></p>
 
   <div id="result" hidden></div>
@@ -31,11 +31,6 @@
     <input id="term" type="number" step="any" inputmode="decimal" placeholder="введи текущую цену, чтобы сверить">
     <p class="note" id="termnote"></p>
   </div>
-
-  <section id="rankcard" hidden>
-    <h2>Другие пары с сигналом</h2>
-    <table id="rank"></table>
-  </section>
 
   <section id="stratcard" hidden>
     <h2>Что показали стратегии</h2>

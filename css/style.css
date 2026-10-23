@@ -40,9 +40,30 @@ button{cursor:pointer}
 .seg button.on{background:var(--surface-2);color:var(--text)}
 .go{width:100%;min-height:54px;border:0;border-radius:14px;background:var(--accent);color:var(--on-accent);font-size:17px;font-weight:700}
 .go:disabled{opacity:.6}
-.prog{height:3px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden}
-.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
 .status{min-height:20px;margin:8px 0 12px;font-size:13px;color:var(--muted)}
+
+/* Табло пар: плитки загораются по очереди во время подбора */
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 4px}
+.tile{display:flex;flex-direction:column;justify-content:space-between;gap:3px;min-height:70px;padding:7px 7px 6px;
+  border-radius:12px;text-align:left;background:var(--surface);border:1px solid var(--line);color:var(--muted);overflow:hidden}
+.tile .tp{font-size:12px;font-weight:650;color:var(--text)}
+.tile .spark{width:100%;height:16px;display:block}
+.tile .spark polyline{fill:none;stroke:currentColor;stroke-width:1.4;vector-effect:non-scaling-stroke;opacity:.75}
+.tile .tm{display:flex;gap:5px;align-items:center;min-height:15px;font-size:11px;white-space:nowrap}
+.tile .tm i,.tile .tm em{font-style:normal}
+.tile .tm .dt{letter-spacing:1px}
+.tile.idle{opacity:.7}
+.tile.busy{border-color:var(--accent);animation:scan .8s ease-in-out infinite alternate}
+.tile.sig.up{background:rgba(61,214,163,.14);border-color:var(--up);color:var(--up)}
+.tile.sig.down{background:rgba(255,122,107,.14);border-color:var(--down);color:var(--down)}
+.tile.near{border-style:dashed;border-color:var(--warn);color:var(--warn)}
+.tile.off{opacity:.6}
+.tile.off .tm{color:var(--warn)}
+.tile.pop{animation:pop .24s ease-out}
+.tile.sel{outline:2px solid var(--accent);outline-offset:1px}
+.tile:disabled{cursor:default}
+@keyframes scan{from{box-shadow:inset 0 0 0 transparent}to{box-shadow:inset 0 0 14px rgba(111,183,255,.35)}}
+@keyframes pop{from{transform:scale(.92);opacity:.4}to{transform:none;opacity:1}}
 
 /* Билет с сигналом: единственный выразительный элемент страницы */
 .ticket{--dir:var(--muted);position:relative;display:grid;grid-template-columns:1fr 104px;gap:6px 12px;
