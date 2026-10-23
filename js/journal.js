@@ -68,6 +68,37 @@
     return { run, losses, wins, blocked };
   }
 
-  root.Journal = { add, resolve, stats, wilson, risk, MAX };
+  // Результаты по стратегиям: сигнал засчитывается каждой стратегии, которая в нём участвовала (поле by).
+  // Стратегии из одного сигнала получают один и тот же исход, поэтому их цифры связаны между собой.
+  function byStrategy(entries) {
+    const m = {};
+    for (const e of entries) {
+      if (e.status !== 'win' && e.status !== 'loss') continue;
+      for (const id of e.by || []) {
+        const x = m[id] || (m[id] = { w: 0, l: 0, n: 0 });
+        if (e.status === 'win') x.w++; else x.l++;
+        x.n++;
+      }
+    }
+    for (const id of Object.keys(m)) m[id].ci = wilson(m[id].w, m[id].n);
+    return m;
+  }
+
+  // Стратегии, которые на реальных сигналах явно ниже точки безубыточности: даже верхняя граница
+  // 95%-го интервала не дотягивает до неё, и сигналов не меньше minN.
+  function weak(entries, payout = 85, minN = 30) {
+    const be = 1 / (1 + payout / 100), m = byStrategy(entries);
+    return Object.keys(m).filter(id => m[id].n >= minN && m[id].ci.hi < be);
+  }
+
+  const STATUS_CSV = { win: 'win', loss: 'loss', draw: 'draw', open: 'open', lost: 'no_data' };
+  function toCsv(entries) {
+    const head = 'time_utc,pair,timeframe,direction,expiry_candles,entry_price,status,exit_price,strategies';
+    const rows = entries.map(e => [e.t0, e.pair, e.tf, e.dir > 0 ? 'up' : 'down', e.h, e.price,
+      STATUS_CSV[e.status] || e.status, e.exit === undefined ? '' : e.exit, (e.by || []).join('+')].join(','));
+    return [head].concat(rows).join('\n');
+  }
+
+  root.Journal = { add, resolve, stats, wilson, risk, byStrategy, weak, toCsv, MAX };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Journal;
 })(typeof window !== 'undefined' ? window : globalThis);

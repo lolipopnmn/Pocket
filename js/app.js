@@ -7,9 +7,9 @@
   }
 
   const { PAIRS, TFS } = Data;
-  const S = { tf: '1m', source: 'demo', key: '', payout: 85, minAgree: 2, stake: 1, balance: 0, stopStreak: 3, stopDaily: 5, n: 0 };
+  const S = { tf: '1m', source: 'demo', key: '', payout: 85, minAgree: 2, stake: 1, balance: 0, stopStreak: 3, stopDaily: 5, autoOff: 1, n: 0 };
   try { Object.assign(S, JSON.parse(localStorage.getItem('pocketfx') || '{}')); } catch (e) {}
-  const save = () => { try { localStorage.setItem('pocketfx', JSON.stringify({ tf: S.tf, source: S.source, key: S.key, payout: S.payout, minAgree: S.minAgree, stake: S.stake, balance: S.balance, stopStreak: S.stopStreak, stopDaily: S.stopDaily })); } catch (e) {} };
+  const save = () => { try { localStorage.setItem('pocketfx', JSON.stringify({ tf: S.tf, source: S.source, key: S.key, payout: S.payout, minAgree: S.minAgree, stake: S.stake, balance: S.balance, stopStreak: S.stopStreak, stopDaily: S.stopDaily, autoOff: S.autoOff })); } catch (e) {} };
 
   const store = {};     // свечи по парам для текущего подбора
   let live = null;      // { pair, timer, signalT, dir, refPrice }
@@ -42,6 +42,7 @@
   const stakeTxt = () => (S.balance > 0
     ? 'Ставка по правилу ' + S.stake + '% от баланса: ' + money(S.balance * S.stake / 100) + '.'
     : 'Ставка: не больше ' + S.stake + '% от баланса.');
+  const offList = () => (S.autoOff && S.source !== 'demo' ? Journal.weak(journal, S.payout) : []);
   const riskNow = () => Journal.risk(journal, Date.now(), { streak: S.stopStreak, daily: S.stopDaily });
 
   function renderJournal() {
@@ -56,6 +57,11 @@
     else if (st.ci.hi < st.be) msg += 'Ниже точки безубыточности: по этим сигналам ты бы терял деньги.';
     else msg += 'В пределах погрешности от точки безубыточности: отличить от случайности пока нельзя.';
     $('jstat').textContent = msg;
+    const bs = Journal.byStrategy(journal), ids = Object.keys(bs), off = offList();
+    $('jsh').hidden = ids.length === 0;
+    $('jstrat').innerHTML = ids.sort((a, b) => bs[b].n - bs[a].n).map(id =>
+      '<tr><td>' + short(id, id) + (off.includes(id) ? ' <small class="warn">отключена</small>' : '') + '</td><td>' +
+      bs[id].w + ' из ' + bs[id].n + ' <small>(' + pct(bs[id].w / bs[id].n) + ')</small></td></tr>').join('');
     $('jlist').innerHTML = journal.slice(-8).reverse().map(e =>
       '<tr><td><b>' + e.pair + '</b> <span class="' + dirCls(e.dir) + '">' + dirWord(e.dir).toLowerCase() + '</span> на ' +
       (e.h * TFS[e.tf].ms / 60000) + ' мин <small>' + e.t0.slice(5) + '</small></td><td>' + (JST[e.status] || e.status) + '</td></tr>').join('');
@@ -126,11 +132,12 @@
     $('strats').innerHTML = res.per.map(p => {
       const st = p.stats[b.h];
       const flag = p.dir ? ' <span class="' + dirCls(p.dir) + '">' + arrow(p.dir) + '</span>' : '';
+      if (p.disabled) return '<tr><td>' + short(p.id, p.name) + '</td><td><small class="warn">отключена по журналу</small></td></tr>';
       return '<tr><td>' + short(p.id, p.name) + flag + '</td><td>' + pct(st.adj) + ' из ' + pct(res.be) + ' <small>(' + st.n + ')</small>' + (st.ok ? ' <span class="b">✓</span>' : '') + '</td></tr>';
     }).join('');
 
     if (S.source !== 'demo') {
-      journal = Journal.add(journal, { pair, tf: S.tf, t0: res.last.t, price: res.last.c, dir: b.dir, h: b.h });
+      journal = Journal.add(journal, { pair, tf: S.tf, t0: res.last.t, price: res.last.c, dir: b.dir, h: b.h, by: b.contrib.map(c => c.id) });
       saveJ(); renderJournal();
     }
     startLive(pair, res.last.t, b.dir);
@@ -314,7 +321,7 @@
         const candles = S.source === 'demo' ? Data.genDemo(pair, S.tf, S.n, Data.HISTORY) : await Data.fetchTwelve(pair, S.tf, S.key);
         if (S.source !== 'demo' && Data.isStale(candles, S.tf)) { stale.push(pair); continue; }
         store[pair] = candles;
-        results.push({ pair, res: Scanner.analyzePair(candles.slice(0, -1), S.payout, S.minAgree) });
+        results.push({ pair, res: Scanner.analyzePair(candles.slice(0, -1), S.payout, S.minAgree, offList()) });
       } catch (e) {
         errors.push(pair + ': ' + e.message);
         if (/ключ/i.test(e.message)) break;
@@ -337,7 +344,7 @@
   function sync() {
     $('source').value = S.source; $('key').value = S.key; $('payout').value = S.payout; $('minagree').value = String(S.minAgree);
     $('stake').value = S.stake; $('balance').value = S.balance > 0 ? S.balance : '';
-    $('stopstreak').value = String(S.stopStreak); $('stopdaily').value = String(S.stopDaily);
+    $('autooff').value = String(S.autoOff ? 1 : 0); $('stopstreak').value = String(S.stopStreak); $('stopdaily').value = String(S.stopDaily);
     const live_ = S.source !== 'demo';
     $('src').className = 'pill' + (live_ ? ' live' : '');
     $('src').innerHTML = '<i></i><b>' + (live_ ? 'Twelve Data' : 'демо') + '</b>';
@@ -352,6 +359,17 @@
   $('balance').onchange = (e) => { S.balance = Math.max(0, +e.target.value || 0); save(); sync(); };
   $('stopstreak').onchange = (e) => { S.stopStreak = +e.target.value || 0; save(); sync(); renderJournal(); };
   $('stopdaily').onchange = (e) => { S.stopDaily = +e.target.value || 0; save(); sync(); renderJournal(); };
+  $('autooff').onchange = (e) => { S.autoOff = +e.target.value ? 1 : 0; save(); sync(); renderJournal(); };
+  $('jcsv').onclick = async () => {
+    const csv = Journal.toCsv(journal), note = $('jcsvnote'), box = $('jcsvbox');
+    try {
+      await navigator.clipboard.writeText(csv);
+      box.hidden = true; note.textContent = 'Скопировано записей: ' + journal.length + '. Вставь в таблицу.';
+    } catch (e) {
+      box.value = csv; box.hidden = false; box.select();
+      note.textContent = 'Автоматически скопировать не вышло: выдели текст ниже и скопируй вручную.';
+    }
+  };
   $('scan').onclick = scan;
   $('jclear').onclick = () => { journal = []; saveJ(); renderJournal(); };
   $('term').oninput = termCheck;

@@ -82,4 +82,30 @@ ok(Journal.add(Array.from({ length: 300 }, (_, i) => sig({ t0: 'x' + i })), sig(
   ok(!Journal.risk([], now, L).blocked, 'пустой журнал');
 }
 
+// ---- результаты по стратегиям, отключение слабых, CSV ----
+{
+  const mkE = (status, by) => ({ pair: 'EUR/USD', tf: '1m', t0: '2026-10-22 10:00', price: 1.1, dir: 1, h: 2, status, by });
+  const rep = (n, status, by) => Array.from({ length: n }, () => mkE(status, by));
+  const entries = [
+    ...rep(10, 'win', ['macd', 'stoch']), ...rep(10, 'loss', ['macd', 'stoch']),
+    ...rep(5, 'win', ['bb']), ...rep(50, 'loss', ['bb']),                 // bb: 5 из 55, явно ниже безубыточности
+    ...rep(10, 'loss', ['keltner']),                                       // мало данных
+    mkE('open', ['macd']), mkE('draw', ['macd']), mkE('win'),              // не считаются / без by
+  ];
+  const m = Journal.byStrategy(entries);
+  ok(m.macd.w === 10 && m.macd.l === 10 && m.macd.n === 20, 'macd: открытые и возвраты не считаются');
+  ok(m.stoch.n === 20 && m.bb.w === 5 && m.bb.l === 50 && m.keltner.n === 10, 'подсчёт по стратегиям');
+  ok(m.bb.ci.hi < 0.2, 'интервал bb низкий');
+  const weakIds = Journal.weak(entries, 85, 30);
+  ok(weakIds.length === 1 && weakIds[0] === 'bb', 'отключается только bb: у остальных мало данных или нет явного провала, а было: ' + weakIds.join());
+  ok(Journal.weak(entries, 85, 100).length === 0, 'порог по числу сигналов');
+  ok(Journal.weak([], 85, 30).length === 0, 'пустой журнал');
+
+  const csv = Journal.toCsv([{ pair: 'EUR/USD', tf: '1m', t0: '2026-10-22 10:00', price: 1.1, dir: -1, h: 2, status: 'win', exit: 1.09, by: ['macd', 'stoch'] },
+    { pair: 'GBP/USD', tf: '5m', t0: '2026-10-22 10:05', price: 1.3, dir: 1, h: 1, status: 'open' }]).split('\n');
+  ok(csv.length === 3 && csv[0].split(',').length === 9, 'csv: заголовок и строки');
+  ok(csv[1] === '2026-10-22 10:00,EUR/USD,1m,down,2,1.1,win,1.09,macd+stoch', 'csv: строка с результатом: ' + csv[1]);
+  ok(csv[2] === '2026-10-22 10:05,GBP/USD,5m,up,1,1.3,open,,', 'csv: открытая запись');
+}
+
 console.log('Журнал: все проверки пройдены:', checks);

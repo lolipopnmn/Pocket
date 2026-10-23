@@ -47,7 +47,12 @@
     <h2>Журнал сигналов</h2>
     <p class="note" id="jstat" style="margin:0 0 10px"></p>
     <table id="jlist"></table>
+    <h2 style="margin-top:16px;font-size:15px" id="jsh" hidden>По стратегиям</h2>
+    <table id="jstrat"></table>
     <p class="note">Каждый показанный сигнал записывается, а после экспирации результат сверяется с реальными свечами. Это проверка на новых данных, ей можно верить больше, чем истории. Хранится только на этом устройстве, в демо-режиме не ведётся.</p>
+    <button class="ghost" id="jcsv">Скопировать журнал для таблицы</button>
+    <p class="note" id="jcsvnote"></p>
+    <textarea id="jcsvbox" readonly hidden rows="5" style="width:100%;margin-top:6px"></textarea>
     <button class="ghost" id="jclear">Очистить журнал</button>
   </section>
 
@@ -74,6 +79,12 @@
         <option value="0">Выключен</option><option value="3">После 3</option><option value="5">После 5</option><option value="8">После 8</option>
       </select>
       <p class="note">Стоп работает по журналу: считаются сигналы приложения с проигрышем, а не твои реальные сделки. Он включается только на реальных данных и действует до конца дня.</p>
+      <label for="autooff">Отключать слабые стратегии</label>
+      <select id="autooff">
+        <option value="1">Да, по журналу</option>
+        <option value="0">Нет</option>
+      </select>
+      <p class="note">Стратегия отключается, если после 30 и более реальных сигналов в журнале даже верхняя граница доверительного интервала ниже точки безубыточности. Её можно вернуть, очистив журнал.</p>
       <label for="source">Источник данных</label>
       <select id="source">
         <option value="demo">Демо (синтетические данные)</option>

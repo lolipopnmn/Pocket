@@ -147,4 +147,31 @@ ok(ranked.map(r => r.pair).join('') === 'CB', 'ранжирование');
   ok(without.n - withGap.n === 3 && withGap.n > 0, 'ровно 3 сделки пересекают дыру при h=3: ' + (without.n - withGap.n));
 }
 
+// ---- Отключённые по журналу стратегии не участвуют ни «за», ни «против» ----
+{
+  const mock = (id, kind, lastDir) => ({ id, name: id, signals(c) {
+    const sg = new Int8Array(c.length);
+    for (let i = Strategies.WARMUP; i < c.length - 1; i++) {
+      if (kind === 'up' && c[i + 1].c > c[i].c) sg[i] = 1;
+      if (kind === 'down' && c[i + 1].c < c[i].c) sg[i] = -1;
+    }
+    for (let j = 0; j < 5; j++) sg[c.length - 1 - j] = 0;
+    sg[c.length - 1] = lastDir;
+    return sg;
+  } });
+  const cs = Data.genDemo('EUR/USD', '1m', 777);
+  const saved = Strategies.list.splice(0);
+  try {
+    Strategies.list.push(mock('a', 'up', 1), mock('b', 'up', 1), mock('c', 'down', -1));
+    let r = Scanner.analyzePair(cs, 85, 2, []);
+    ok(r.best === null, 'без отключений подтверждённая «против» отменяет сигнал');
+    r = Scanner.analyzePair(cs, 85, 2, ['c']);
+    ok(r.best && r.best.count === 2 && r.per[2].disabled === true && r.per[0].disabled === false, 'отключённая «против» больше не мешает');
+    r = Scanner.analyzePair(cs, 85, 2, ['b']);
+    ok(r.best === null && r.partial === null, 'отключённая «за» не считается совпавшей, а «против» остаётся');
+    r = Scanner.analyzePair(cs, 85, 1, ['a', 'b', 'c']);
+    ok(r.best === null && r.partial === null, 'все отключены: сигналов нет');
+  } finally { Strategies.list.splice(0, Strategies.list.length, ...saved); }
+}
+
 console.log('\nВсе проверки пройдены:', checks);

@@ -42,7 +42,7 @@
 
   // minAgree: сколько стратегий должно совпасть в одну сторону. Подтверждённая стратегия против сигнала
   // отменяет его. Из допустимых вариантов выбирается тот, у которого больше суммарное преимущество.
-  function analyzePair(candles, payout = 85, minAgree = 2) {
+  function analyzePair(candles, payout = 85, minAgree = 2, disabled = []) {
     if (candles.length < WARMUP + 60) throw new Error('Мало свечей для анализа');
     const closes = candles.map(x => x.c), idx = candles.length - 1, be = breakeven(payout);
     // История делится пополам: стратегия допускается в сигнал, только если преимущество есть и в первой,
@@ -63,7 +63,10 @@
           ok: adj > be && adjA > be && adjB > be };
       }
       const act = active(sig, idx);
-      return { id: s.id, name: s.name, dir: act.dir, age: act.age, stats };
+      // стратегия, отключённая по журналу, не участвует ни «за», ни «против»
+      const off = disabled.includes(s.id);
+      if (off) for (const h of HORIZONS) stats[h].ok = false;
+      return { id: s.id, name: s.name, dir: act.dir, age: act.age, disabled: off, stats };
     });
 
     const cands = [];
