@@ -4,6 +4,7 @@
    чтобы пара удачных сделок на малой выборке не выглядела как закономерность. */
 (function (root) {
   if (!root.Strategies && typeof require !== 'undefined') require('./strategies.js');
+  if (!root.Data && typeof require !== 'undefined') require('./data.js');
   const { list, WARMUP } = root.Strategies;
   const HORIZONS = [1, 2, 3]; // экспирация в свечах выбранного таймфрейма
   const PRIOR = 10;
@@ -12,12 +13,15 @@
 
   // Вход по закрытию свечи i, результат по закрытию свечи i+h. Равенство цен считается возвратом ставки.
   // from/to ограничивают диапазон сигналов (для проверки на половинах истории).
-  function backtest(closes, sig, h, from = WARMUP, to = closes.length - h) {
+  // gap = { ts, step }: сделки, у которых между входом и выходом пропуск по времени (выходные, потерянные
+  // минуты), пропускаются: «через h свечей» должно означать h реальных интервалов.
+  function backtest(closes, sig, h, from = WARMUP, to = closes.length - h, gap = null) {
     let w = 0, l = 0, d = 0;
     const end = Math.min(to, closes.length - h);
     for (let i = from; i < end; i++) {
       const s = sig[i];
       if (!s) continue;
+      if (gap && gap.ts[i + h] - gap.ts[i] > h * gap.step * 1.5) continue;
       const a = closes[i], z = closes[i + h];
       if (z === a) d++;
       else if ((s > 0) === (z > a)) w++;
@@ -45,11 +49,15 @@
     // и во второй половине. Так отсекается то, что «повезло» на одном отрезке (из ~190 проверяемых вариантов
     // часть всегда выглядит хорошо случайно).
     const mid = Math.floor((WARMUP + closes.length) / 2);
+    const ts = candles.map(x => root.Data.parseT(x.t));
+    let step = Infinity;
+    for (let i = 1; i < ts.length; i++) { const d = ts[i] - ts[i - 1]; if (d > 0 && d < step) step = d; }
+    const gap = { ts, step };
     const per = list.map(s => {
       const sig = s.signals(candles), stats = {};
       for (const h of HORIZONS) {
-        const b = backtest(closes, sig, h);
-        const A = backtest(closes, sig, h, WARMUP, mid), B = backtest(closes, sig, h, mid);
+        const b = backtest(closes, sig, h, WARMUP, closes.length - h, gap);
+        const A = backtest(closes, sig, h, WARMUP, mid, gap), B = backtest(closes, sig, h, mid, closes.length - h, gap);
         const adj = shrink(b), adjA = shrink(A), adjB = shrink(B);
         stats[h] = { ...b, adj, edge: adj - be, a: { ...A, adj: adjA }, b: { ...B, adj: adjB },
           ok: adj > be && adjA > be && adjB > be };

@@ -130,4 +130,21 @@ ok(ranked.map(r => r.pair).join('') === 'CB', 'ранжирование');
   ok(Strategies.list.length === 8, 'список стратегий восстановлен');
 }
 
+// ---- Бэктест не считает сделки через пропуски по времени ----
+{
+  const cs = Data.genDemo('EUR/USD', '1m', 42);
+  const base = Scanner.analyzePair(cs, 85, 2);
+  // вырезаем 30 свечей посередине (как выходные): индексы «через h свечей» теперь пересекают дыру
+  const holey = cs.slice(0, 500).concat(cs.slice(530));
+  const rh = Scanner.analyzePair(holey, 85, 2);
+  const tot = (r) => r.per.reduce((a, p) => a + p.stats[3].n, 0);
+  ok(tot(rh) <= tot(base) + 5, 'после выреза сделок не больше исходного (минус пересекающие дыру)');
+  const sig = new Int8Array(holey.length).fill(1);
+  const ts = holey.map(x => Data.parseT(x.t));
+  const closes = holey.map(x => x.c);
+  const withGap = Scanner.backtest(closes, sig, 3, 300, holey.length - 3, { ts, step: 60000 });
+  const without = Scanner.backtest(closes, sig, 3, 300, holey.length - 3);
+  ok(without.n - withGap.n === 3 && withGap.n > 0, 'ровно 3 сделки пересекают дыру при h=3: ' + (without.n - withGap.n));
+}
+
 console.log('\nВсе проверки пройдены:', checks);

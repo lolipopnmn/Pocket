@@ -50,6 +50,24 @@
     return { w, l, d, open, n, rate: n ? w / n : 0, be, ci: wilson(w, n) };
   }
 
-  root.Journal = { add, resolve, stats, wilson, MAX };
+  // Ограничения риска по журналу за сегодняшний день (по местному времени устройства).
+  // limits.streak: стоп после N проигрышей подряд; limits.daily: стоп после N проигрышей за день; 0 = выключено.
+  // Считаются только проверенные сигналы (победа или поражение), возвраты и ожидающие пропускаются.
+  function risk(entries, now, limits = {}) {
+    const d = new Date(now);
+    const sameDay = (ms) => { const x = new Date(ms); return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate(); };
+    const today = entries
+      .filter(e => (e.status === 'win' || e.status === 'loss') && sameDay(root.Data.parseT(e.t0)))
+      .sort((a, b) => (a.t0 < b.t0 ? -1 : a.t0 > b.t0 ? 1 : 0));
+    let run = 0;
+    for (let i = today.length - 1; i >= 0 && today[i].status === 'loss'; i--) run++;
+    const losses = today.filter(e => e.status === 'loss').length, wins = today.length - losses;
+    let blocked = null;
+    if (limits.streak && run >= limits.streak) blocked = { kind: 'streak', run, losses, wins };
+    else if (limits.daily && losses >= limits.daily) blocked = { kind: 'daily', run, losses, wins };
+    return { run, losses, wins, blocked };
+  }
+
+  root.Journal = { add, resolve, stats, wilson, risk, MAX };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Journal;
 })(typeof window !== 'undefined' ? window : globalThis);

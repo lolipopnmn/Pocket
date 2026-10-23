@@ -9,7 +9,8 @@
     '1m': { td: '1min', ms: 60000, label: 'M1' },
     '5m': { td: '5min', ms: 300000, label: 'M5' },
   };
-  const COUNT = 1000;
+  const COUNT = 1000;      // размер демо-ряда по умолчанию (тесты)
+  const HISTORY = 5000;    // реальные данные и демо в приложении: максимум Twelve Data за один запрос (1 кредит на пару)
 
   const parseT = (t) => Date.parse(t.replace(' ', 'T') + ':00Z');
   const fmtT = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
@@ -24,14 +25,14 @@
   }
   const gauss = (R) => Math.sqrt(-2 * Math.log(R() + 1e-12)) * Math.cos(2 * Math.PI * R());
 
-  function genDemo(pair, tf, salt) {
+  function genDemo(pair, tf, salt, count = COUNT) {
     let seed = 0;
     for (const ch of pair + tf) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
     seed += salt * 7919;
     const R = rng(seed), base = PAIRS[pair], step = base * 0.00035, ms = TFS[tf].ms, out = [];
     let p = base, drift = 0;
-    const t0 = Math.floor(Date.now() / ms) * ms - (COUNT - 1) * ms;
-    for (let i = 0; i < COUNT; i++) {
+    const t0 = Math.floor(Date.now() / ms) * ms - (count - 1) * ms;
+    for (let i = 0; i < count; i++) {
       if (i % 40 === 0) drift = gauss(R) * step * 0.15;
       const o = p, c = o + drift + gauss(R) * step;
       const h = Math.max(o, c) + Math.abs(gauss(R)) * step * 0.5;
@@ -72,7 +73,7 @@
     if (!key) throw new Error('Введи API-ключ Twelve Data в настройках');
     await throttle();
     const url = 'https://api.twelvedata.com/time_series?symbol=' + encodeURIComponent(pair) +
-      '&interval=' + TFS[tf].td + '&outputsize=' + COUNT + '&order=asc&apikey=' + encodeURIComponent(key);
+      '&interval=' + TFS[tf].td + '&outputsize=' + HISTORY + '&order=asc&apikey=' + encodeURIComponent(key);
     const r = await fetch(url), j = await r.json();
     if (j.status === 'error' || !j.values) throw new Error(j.message || 'Не удалось получить данные по ' + pair);
     return j.values.map(v => ({ t: v.datetime.slice(0, 16), o: +v.open, h: +v.high, l: +v.low, c: +v.close }));
@@ -83,6 +84,6 @@
     return Date.now() - parseT(candles[candles.length - 1].t) > 10 * TFS[tf].ms;
   }
 
-  root.Data = { PAIRS, TFS, genDemo, tickDemo, fetchTwelve, isStale, parseT, fmtT };
+  root.Data = { PAIRS, TFS, HISTORY, genDemo, tickDemo, fetchTwelve, isStale, parseT, fmtT };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Data;
 })(typeof window !== 'undefined' ? window : globalThis);

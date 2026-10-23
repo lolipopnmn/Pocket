@@ -60,6 +60,20 @@
         <option value="3">Минимум 3</option>
         <option value="4">Минимум 4</option>
       </select>
+      <label for="balance">Баланс, для расчёта ставки</label>
+      <input id="balance" type="number" min="0" step="any" inputmode="decimal" placeholder="необязательно">
+      <label for="stake">Ставка, % от баланса</label>
+      <input id="stake" type="number" min="0.5" max="5" step="0.5" value="1">
+      <label for="stopstreak">Стоп после проигрышей подряд</label>
+      <select id="stopstreak">
+        <option value="0">Выключен</option><option value="2">После 2</option><option value="3">После 3</option>
+        <option value="4">После 4</option><option value="5">После 5</option>
+      </select>
+      <label for="stopdaily">Стоп после проигрышей за день</label>
+      <select id="stopdaily">
+        <option value="0">Выключен</option><option value="3">После 3</option><option value="5">После 5</option><option value="8">После 8</option>
+      </select>
+      <p class="note">Стоп работает по журналу: считаются сигналы приложения с проигрышем, а не твои реальные сделки. Он включается только на реальных данных и действует до конца дня.</p>
       <label for="source">Источник данных</label>
       <select id="source">
         <option value="demo">Демо (синтетические данные)</option>

@@ -1,3 +1,4 @@
+process.env.TZ = 'UTC';
 const assert = require('assert');
 require('../js/data.js');
 require('../js/journal.js');
@@ -55,5 +56,30 @@ ok(st.ci.lo < 0.6 && st.ci.hi > 0.6 && st.ci.lo > 0.49 && st.ci.hi < 0.70, 'ин
 const e0 = Journal.stats([], 85);
 ok(e0.n === 0 && e0.rate === 0, 'пустой журнал');
 ok(Journal.add(Array.from({ length: 300 }, (_, i) => sig({ t0: 'x' + i })), sig({ t0: 'new' })).length === 300, 'лимит записей');
+
+// ---- ограничения риска ----
+{
+  const now = Date.UTC(2026, 9, 22, 18, 0);
+  const E = (hour, min, status) => ({ pair: 'EUR/USD', tf: '1m', t0: Data.fmtT(Date.UTC(2026, 9, 22, hour, min)), price: 1, dir: 1, h: 1, status });
+  const L = { streak: 3, daily: 5 };
+
+  let r = Journal.risk([E(10, 0, 'win'), E(10, 5, 'loss'), E(10, 10, 'loss')], now, L);
+  ok(r.run === 2 && r.losses === 2 && r.wins === 1 && !r.blocked, 'две подряд: ещё не стоп');
+  r = Journal.risk([E(10, 0, 'win'), E(10, 5, 'loss'), E(10, 10, 'loss'), E(10, 15, 'loss')], now, L);
+  ok(r.blocked && r.blocked.kind === 'streak' && r.run === 3, 'три проигрыша подряд: стоп');
+  r = Journal.risk([E(10, 5, 'loss'), E(10, 10, 'loss'), E(10, 15, 'loss'), E(10, 20, 'win')], now, L);
+  ok(!r.blocked && r.run === 0, 'победа сбрасывает серию');
+  r = Journal.risk([E(10, 0, 'loss'), E(10, 5, 'win'), E(10, 10, 'loss'), E(10, 15, 'win'), E(10, 20, 'loss'), E(10, 25, 'win'),
+    E(10, 30, 'loss'), E(10, 35, 'win'), E(10, 40, 'loss')], now, L);
+  ok(r.blocked && r.blocked.kind === 'daily' && r.losses === 5, 'пять проигрышей за день: стоп, хотя подряд их нет');
+  r = Journal.risk([E(10, 5, 'loss'), E(10, 10, 'loss'), E(10, 15, 'loss')], now, { streak: 0, daily: 0 });
+  ok(!r.blocked, 'лимиты выключены');
+  r = Journal.risk([E(10, 5, 'loss'), E(10, 10, 'draw'), E(10, 15, 'loss'), E(10, 20, 'open'), E(10, 25, 'loss')], now, L);
+  ok(r.blocked && r.run === 3, 'возврат и ожидающие не прерывают серию и не считаются');
+  const yesterday = { ...E(10, 5, 'loss'), t0: Data.fmtT(Date.UTC(2026, 9, 21, 10, 5)) };
+  r = Journal.risk([yesterday, { ...yesterday, t0: Data.fmtT(Date.UTC(2026, 9, 21, 10, 10)) }, { ...yesterday, t0: Data.fmtT(Date.UTC(2026, 9, 21, 10, 15)) }], now, L);
+  ok(!r.blocked && r.losses === 0, 'вчерашние проигрыши не блокируют сегодня');
+  ok(!Journal.risk([], now, L).blocked, 'пустой журнал');
+}
 
 console.log('Журнал: все проверки пройдены:', checks);

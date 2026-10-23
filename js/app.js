@@ -7,9 +7,9 @@
   }
 
   const { PAIRS, TFS } = Data;
-  const S = { tf: '1m', source: 'demo', key: '', payout: 85, minAgree: 2, n: 0 };
+  const S = { tf: '1m', source: 'demo', key: '', payout: 85, minAgree: 2, stake: 1, balance: 0, stopStreak: 3, stopDaily: 5, n: 0 };
   try { Object.assign(S, JSON.parse(localStorage.getItem('pocketfx') || '{}')); } catch (e) {}
-  const save = () => { try { localStorage.setItem('pocketfx', JSON.stringify({ tf: S.tf, source: S.source, key: S.key, payout: S.payout, minAgree: S.minAgree })); } catch (e) {} };
+  const save = () => { try { localStorage.setItem('pocketfx', JSON.stringify({ tf: S.tf, source: S.source, key: S.key, payout: S.payout, minAgree: S.minAgree, stake: S.stake, balance: S.balance, stopStreak: S.stopStreak, stopDaily: S.stopDaily })); } catch (e) {} };
 
   const store = {};     // свечи по парам для текущего подбора
   let live = null;      // { pair, timer, signalT, dir, refPrice }
@@ -38,11 +38,18 @@
   const saveJ = () => { try { localStorage.setItem(JKEY, JSON.stringify(journal)); } catch (e) {} };
   const JST = { win: '<span class="b">угадал</span>', loss: '<span class="s">мимо</span>', draw: 'возврат', open: '<span class="n">ждёт</span>', lost: '<span class="n">нет данных</span>' };
 
+  const money = (x) => x.toFixed(2).replace('.', ',');
+  const stakeTxt = () => (S.balance > 0
+    ? 'Ставка по правилу ' + S.stake + '% от баланса: ' + money(S.balance * S.stake / 100) + '.'
+    : 'Ставка: не больше ' + S.stake + '% от баланса.');
+  const riskNow = () => Journal.risk(journal, Date.now(), { streak: S.stopStreak, daily: S.stopDaily });
+
   function renderJournal() {
     $('jcard').hidden = journal.length === 0;
     if (!journal.length) return;
     const st = Journal.stats(journal, S.payout);
-    let msg = 'Проверено: ' + st.n + ' (угадано ' + st.w + ', мимо ' + st.l + (st.d ? ', возврат ' + st.d : '') + '), ждут результата: ' + st.open + '. ';
+    const rk = riskNow();
+    let msg = 'Сегодня: побед ' + rk.wins + ', проигрышей ' + rk.losses + (rk.run ? ', подряд ' + rk.run : '') + '. Всего проверено: ' + st.n + ' (угадано ' + st.w + ', мимо ' + st.l + (st.d ? ', возврат ' + st.d : '') + '), ждут результата: ' + st.open + '. ';
     if (st.n) msg += 'Доля побед ' + pct(st.rate) + ' (95%-интервал ' + pct(st.ci.lo) + ' до ' + pct(st.ci.hi) + '), нужно ' + pct(st.be) + '. ';
     if (st.n < 30) msg += 'Мало сигналов для выводов: нужно хотя бы 30, а лучше 100.';
     else if (st.ci.lo > st.be) msg += 'Пока выше точки безубыточности, но проверь на большей выборке.';
@@ -81,6 +88,20 @@
     $('livecard').hidden = true; $('rankcard').hidden = true; $('stratcard').hidden = true;
   }
 
+  function showBlocked(rk) {
+    const b = rk.blocked;
+    const why = b.kind === 'streak'
+      ? 'Подряд ' + b.run + ' ' + ru(b.run, 'проигрыш', 'проигрыша', 'проигрышей') + ' по сигналам приложения.'
+      : 'За сегодня ' + b.losses + ' ' + ru(b.losses, 'проигрыш', 'проигрыша', 'проигрышей') + ' по сигналам приложения (лимит ' + S.stopDaily + ').';
+    $('result').hidden = false;
+    $('result').innerHTML =
+      '<article class="ticket none"><div class="tk-main"><div class="tk-dir">Стоп на сегодня</div>' +
+      '<div class="tk-exp">Сегодня: побед ' + b.wins + ', проигрышей ' + b.losses + '</div></div>' +
+      '<div class="tk-why"><p>' + why + ' Новые сигналы остановлены: после серии неудач хочется отыграться, и именно так теряют депозит. ' +
+      'Сделай перерыв и вернись завтра. Лимиты можно изменить в настройках, но лучше этого не делать.</p></div></article>';
+    $('livecard').hidden = true; $('rankcard').hidden = true; $('stratcard').hidden = true;
+  }
+
   function showTop(top, ranked, stale, errors) {
     const { pair, res } = top, b = res.best, cls = b.dir > 0 ? 'up' : 'down';
     const chips = b.contrib.map(c => '<li>' + short(c.id, c.name) + (c.age ? ' <small>' + c.age + ' св. назад</small>' : '') + '</li>').join('');
@@ -90,7 +111,7 @@
       '<div class="tk-main"><div class="tk-pair">' + pair + '</div><div class="tk-dir">' + dirWord(b.dir) + '</div>' +
       '<div class="tk-exp">на ' + expTxt(b.h) + '</div></div>' + ring(arrow(b.dir)) +
       '<div class="tk-why"><p>Совпали ' + plural(b.count) + ' (нужно минимум ' + res.minAgree + '), подтверждённых против нет. ' +
-      'Чтобы не терять, нужно угадывать не реже ' + pct(res.be) + '.</p><ul class="chips">' + chips + '</ul></div>' +
+      'Чтобы не терять, нужно угадывать не реже ' + pct(res.be) + '.</p><p>' + stakeTxt() + '</p><ul class="chips">' + chips + '</ul></div>' +
       '<p class="tk-foot" id="tkfoot"></p></article>' + notes(stale, errors);
 
     const rest = ranked.slice(1);
@@ -290,7 +311,7 @@
       $('status').textContent = 'Анализ ' + pair + ', ' + (k + 1) + ' из ' + pairs.length;
       $('prog').style.width = Math.round(k / pairs.length * 100) + '%';
       try {
-        const candles = S.source === 'demo' ? Data.genDemo(pair, S.tf, S.n) : await Data.fetchTwelve(pair, S.tf, S.key);
+        const candles = S.source === 'demo' ? Data.genDemo(pair, S.tf, S.n, Data.HISTORY) : await Data.fetchTwelve(pair, S.tf, S.key);
         if (S.source !== 'demo' && Data.isStale(candles, S.tf)) { stale.push(pair); continue; }
         store[pair] = candles;
         results.push({ pair, res: Scanner.analyzePair(candles.slice(0, -1), S.payout, S.minAgree) });
@@ -303,7 +324,9 @@
     const ranked = Scanner.rank(results);
     $('progwrap').hidden = true;
     $('status').textContent = S.source === 'demo' ? 'Демо-режим: данные случайные, результат ничего не говорит о рынке.' : '';
-    if (ranked.length) showTop(ranked[0], ranked, stale, errors);
+    const rk = S.source !== 'demo' ? riskNow() : null;
+    if (rk && rk.blocked) showBlocked(rk);
+    else if (ranked.length) showTop(ranked[0], ranked, stale, errors);
     else showNone(results, stale, errors);
     busy = false; $('scan').disabled = false; $('scanlabel').textContent = 'Подобрать пару';
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {} }
@@ -313,6 +336,8 @@
   $('tfs').innerHTML = Object.keys(TFS).map(t => '<button data-t="' + t + '">' + TFS[t].label + '</button>').join('');
   function sync() {
     $('source').value = S.source; $('key').value = S.key; $('payout').value = S.payout; $('minagree').value = String(S.minAgree);
+    $('stake').value = S.stake; $('balance').value = S.balance > 0 ? S.balance : '';
+    $('stopstreak').value = String(S.stopStreak); $('stopdaily').value = String(S.stopDaily);
     const live_ = S.source !== 'demo';
     $('src').className = 'pill' + (live_ ? ' live' : '');
     $('src').innerHTML = '<i></i><b>' + (live_ ? 'Twelve Data' : 'демо') + '</b>';
@@ -323,6 +348,10 @@
   $('key').onchange = (e) => { S.key = e.target.value.trim(); save(); };
   $('payout').onchange = (e) => { S.payout = Math.min(100, Math.max(50, +e.target.value || 85)); save(); sync(); };
   $('minagree').onchange = (e) => { S.minAgree = Math.min(4, Math.max(1, +e.target.value || 2)); save(); sync(); };
+  $('stake').onchange = (e) => { S.stake = Math.min(5, Math.max(0.5, +e.target.value || 1)); save(); sync(); };
+  $('balance').onchange = (e) => { S.balance = Math.max(0, +e.target.value || 0); save(); sync(); };
+  $('stopstreak').onchange = (e) => { S.stopStreak = +e.target.value || 0; save(); sync(); renderJournal(); };
+  $('stopdaily').onchange = (e) => { S.stopDaily = +e.target.value || 0; save(); sync(); renderJournal(); };
   $('scan').onclick = scan;
   $('jclear').onclick = () => { journal = []; saveJ(); renderJournal(); };
   $('term').oninput = termCheck;
