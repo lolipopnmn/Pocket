@@ -90,6 +90,8 @@ button{cursor:pointer}
 .chips li{background:var(--surface-2);border-radius:999px;padding:4px 11px;font-size:13px}
 .chips small{color:var(--muted);font-size:12px}
 .tk-foot{grid-column:1 / -1;border-top:1px dashed var(--line);margin:0;padding:10px 0 12px;font-size:14px}
+.tk-why .sess{font-size:13px;margin:0 0 10px}
+.sess.peak{color:var(--up)}.sess.quiet,.sess.closed{color:var(--warn)}
 .near{margin:0 0 12px;padding:0;list-style:none;font-size:14px}
 .near li{padding:5px 0;border-top:1px solid var(--line)}
 .near li:first-child{border-top:0}

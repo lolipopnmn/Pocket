@@ -153,6 +153,12 @@
     }).join('');
   }
 
+  // Сессия только подсказка: сигнал не блокируется, но в тихие часы ликвидность ниже
+  const sessNote = () => {
+    const x = window.Sessions ? Sessions.at(Date.now()) : null;
+    return x ? '<p class="sess ' + x.level + '">' + x.label + '</p>' : '';
+  };
+
   function ticketSignal(pair, res) {
     const b = res.best;
     $('result').hidden = false;
@@ -161,7 +167,7 @@
       '<div class="tk-main"><div class="tk-pair">' + pair + '</div><div class="tk-dir">' + dirWord(b.dir) + '</div>' +
       '<div class="tk-exp">на ' + expTxt(b.h) + '</div></div>' + ring(arrow(b.dir)) +
       '<div class="tk-why"><p>Совпали ' + plural(b.count) + ' (нужно минимум ' + res.minAgree + '), подтверждённых против нет. ' +
-      'Чтобы не терять, нужно угадывать не реже ' + pct(res.be) + '.</p><p>' + stakeTxt() + '</p>' + chipsOf(b.contrib) + '</div>' +
+      'Чтобы не терять, нужно угадывать не реже ' + pct(res.be) + '.</p><p>' + stakeTxt() + '</p>' + sessNote() + chipsOf(b.contrib) + '</div>' +
       '<p class="tk-foot" id="tkfoot"></p></article>' + lastNotes;
   }
 
